@@ -1,0 +1,8 @@
+.env
+
+.vscode/
+venv/
+env/
+.idea/
+__pycache__/
+bot/__pycache__/

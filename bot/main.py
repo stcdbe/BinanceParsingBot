@@ -2,7 +2,6 @@ import logging
 
 from aiogram import Dispatcher, Bot
 from aiogram.contrib.fsm_storage.redis import RedisStorage2
-from aiogram.types import CallbackQuery
 from aiogram.utils.exceptions import BotBlocked
 from aiogram.dispatcher.filters import Text
 
@@ -22,10 +21,8 @@ storage = RedisStorage2(host=REDISHOST,
                         prefix='fsm')
 bot = Bot(token=APITOKEN)
 dp = Dispatcher(bot=bot, storage=storage)
-callback = CallbackQuery()
 
 scheduler.ctx.add_instance(instance=bot, declared_class=Bot)
-scheduler.ctx.add_instance(instance=callback, declared_class=CallbackQuery)
 
 dp.register_message_handler(startmes, commands=['start'])
 dp.register_message_handler(getfirstticker, commands=['coin'])

@@ -149,9 +149,12 @@ async def gethelp(message: Message) -> None:
 async def kickbot(event: ChatMemberUpdated, state: FSMContext) -> None:
     userid = event.from_user.id
     tasks = await getusertasks(userid=userid)
-    for task in tasks:
-        await removescheduler(schedulerid=str(task.id))
-        await removetaskfromdb(id=str(task.id))
+    if tasks:
+        for task in tasks:
+            await removescheduler(schedulerid=str(task.id))
+            await removetaskfromdb(id=str(task.id))
+    else:
+        pass
     await state.finish()
 
 

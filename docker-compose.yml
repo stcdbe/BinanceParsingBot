@@ -38,7 +38,7 @@ services:
   bot:
     container_name: bot
     build: .
-    command: sh -c "python3 run.py"
+    command: sh -c "python run.py"
     restart: on-failure
     env_file: ./.env
     depends_on:

@@ -12,14 +12,16 @@ from bot.statesgroups import CoinStates
 from bot.scheduler import scheduler
 
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.WARNING)
 
 storage = RedisStorage2(host=REDISHOST,
                         port=REDISPORT,
                         db=REDISBOTDB,
                         pool_size=10,
                         prefix='fsm')
+
 bot = Bot(token=APITOKEN)
+
 dp = Dispatcher(bot=bot, storage=storage)
 
 scheduler.ctx.add_instance(instance=bot, declared_class=Bot)
@@ -33,6 +35,7 @@ dp.register_callback_query_handler(getcointime, Text(startswith='time_'))
 dp.register_message_handler(cancelstate, commands=['cancel'], state='*')
 dp.register_message_handler(showalltasks, commands=['showalltasks'])
 dp.register_callback_query_handler(removetask, regexp='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+# dp.register_callback_query_handler(removetask, regexp='^[0-9]+$')
 dp.register_callback_query_handler(canceltasks, lambda callback: callback.data == 'canceltasks', state='*')
 dp.register_message_handler(gethelp, commands=['help'])
 dp.register_my_chat_member_handler(kickbot, state='*')

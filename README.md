@@ -9,6 +9,8 @@ Fully asynchronous Telegram bot that informs about a change in the price of a us
 + After that, the user will be prompted to select the time period for informing.
 + Depending on the selected period, a check will take place if the price has changed by a given percentage, the user receives a notification that the coin/token is growing (+0.001%) or falling (-0.001%).
 + If the user already has subscriptions to some other cryptocurrencies, then it is possible to call an interface with buttons where you can delete the selected pair.
+
+As SQL database can be used SQLite or PostgreSQL.
 ___
 ### Getting Started
 #### Running on Local Machine
@@ -49,10 +51,10 @@ ____
 | `REDISTASKSDB`     | Redis tasks database                          |
 ____
 #### Tech Stack
++ `aiohttp`
 + `aiogram`
 + `python-binance`
 + `apschduler`
 + `sqlalchemy`
-+ `aiohttp`
 + `redis` and `aioredis`
 + `docker` and `docker-compose`

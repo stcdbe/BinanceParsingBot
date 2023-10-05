@@ -1,8 +1,8 @@
 from uuid import uuid4
 
-from sqlalchemy import Column, BigInteger, String, Float, UUID
+from sqlalchemy import BigInteger, String, UUID#, Integer
 from sqlalchemy.ext.asyncio import AsyncAttrs
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 class DBBaseModel(AsyncAttrs, DeclarativeBase):
@@ -11,9 +11,13 @@ class DBBaseModel(AsyncAttrs, DeclarativeBase):
 
 class UserTask(DBBaseModel):
     __tablename__ = 'usertask'
-    id = Column(UUID(as_uuid=True), unique=True, primary_key=True, default=uuid4)
-    userid = Column(BigInteger, nullable=False)
-    firstticker = Column(String(5), nullable=False)
-    secondticker = Column(String(5), nullable=False)
-    percentofchange = Column(Float)
-    price = Column(Float)
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    # id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    userid: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    firstticker: Mapped[str] = mapped_column(String(5), nullable=False)
+    secondticker: Mapped[str] = mapped_column(String(5), nullable=False)
+    percentofchange: Mapped[float]
+    price: Mapped[float]
+
+    def __repr__(self) -> str:
+        return self.id

@@ -52,7 +52,7 @@ async def checkcoin(message: Message, state: FSMContext) -> None:
     async with state.proxy() as data:
         data['secondticker'] = secondtickerupper
         firstticker: str = data['firstticker']
-    coinprice = await getcurrentprice(firstticker=firstticker, secondticker=secondtickerupper)
+    coinprice = await getcurrentprice(firtick=firstticker, sectick=secondtickerupper)
     if coinprice:
         await CoinStates.next()
         await message.answer(text=f'Entered pair of cryptocurrencies: <b>{firstticker}/{secondtickerupper}</b>'
@@ -119,7 +119,7 @@ async def showalltasks(message: Message) -> None:
 async def removetask(callback: CallbackQuery) -> None:
     await callback.answer()
     await callback.message.delete()
-    await removescheduler(schedulerid=callback.data)
+    await removescheduler(schedid=callback.data)
     await removetaskfromdb(id=callback.data)
     await callback.message.answer(text='Task removed.\n\nClick /coin to add new one.')
 
@@ -151,10 +151,8 @@ async def kickbot(event: ChatMemberUpdated, state: FSMContext) -> None:
     tasks = await getusertasks(userid=userid)
     if tasks:
         for task in tasks:
-            await removescheduler(schedulerid=str(task.id))
-            await removetaskfromdb(id=str(task.id))
-    else:
-        pass
+            await removescheduler(schedid=str(task.id))
+            await removetaskfromdb(id=task.id)
     await state.finish()
 
 

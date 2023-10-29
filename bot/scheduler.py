@@ -10,19 +10,21 @@ from bot.db import gettaskbytickers, addnewcurrentprice
 from bot.binancerequests import getcurrentprice
 from bot.config import REDISHOST, REDISPORT, REDISTASKSDB, APITOKEN
 from bot.dbmodels import UserTask
+from bot.constants import PAIRUP, PAIRDOWN
 
-jobstores = {'default': RedisJobStore(jobs_key='dispatched_trips_jobs',
-                                      run_times_key='dispatched_trips_running',
-                                      host=REDISHOST,
-                                      port=REDISPORT,
-                                      db=REDISTASKSDB)}
+
+job_stores = {'default': RedisJobStore(jobs_key='dispatched_trips_jobs',
+                                       run_times_key='dispatched_trips_running',
+                                       host=REDISHOST,
+                                       port=REDISPORT,
+                                       db=REDISTASKSDB)}
 
 executors = {'default': AsyncIOExecutor()}
 
 job_defaults = {'coalesce': False,
                 'max_instances': 3}
 
-scheduler = ContextSchedulerDecorator(AsyncIOScheduler(jobstores=jobstores,
+scheduler = ContextSchedulerDecorator(AsyncIOScheduler(jobstores=job_stores,
                                                        executors=executors,
                                                        job_defaults=job_defaults,
                                                        timezone=utc))
@@ -42,13 +44,15 @@ async def sendchangedcur(userid: int, task: UserTask) -> None:
         currentpercent = 100*delta/floatprice
         if currentpercent > task.percentofchange:
             await bot.send_message(chat_id=userid,
-                                   text=f'Pair <b>{task.firstticker}/{task.secondticker}</b> rose above the set'
-                                        f' percentage.\n\nCurrent price: <b>{currentprice}</b>',
+                                   text=PAIRUP.format(firstticker=task.firstticker,
+                                                      secondticker=task.secondticker,
+                                                      currentprice=currentprice),
                                    parse_mode='HTML')
         elif currentpercent < -task.percentofchange:
             await bot.send_message(chat_id=userid,
-                                   text=f'Pair <b>{task.firstticker}/{task.secondticker}</b> fell below the set'
-                                        f' percentage.\n\nCurrent price: <b>{currentprice}</b>',
+                                   text=PAIRDOWN.format(firstticker=task.firstticker,
+                                                        secondticker=task.secondticker,
+                                                        currentprice=currentprice),
                                    parse_mode='HTML')
         await addnewcurrentprice(task=currenttask, currentprice=floatprice)
     await session.close()

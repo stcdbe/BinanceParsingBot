@@ -1,10 +1,7 @@
-from aiogram import executor
+import asyncio
 
-from bot.main import dp
-from bot.handlers import on_startup, on_shutdown
+from bot.main import main
+
 
 if __name__ == '__main__':
-    executor.start_polling(dispatcher=dp,
-                           skip_updates=True,
-                           on_startup=on_startup,
-                           on_shutdown=on_shutdown)
+    asyncio.run(main())

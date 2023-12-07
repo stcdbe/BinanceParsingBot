@@ -10,7 +10,7 @@ Fully asynchronous Telegram bot that informs about a change in the price of a us
 + Depending on the selected period, a check will take place if the price has changed by a given percentage, the user receives a notification that the coin/token is growing (+0.001%) or falling (-0.001%).
 + If the user already has subscriptions to some other cryptocurrencies, then it is possible to call an interface with buttons where you can delete the selected pair.
 
-As SQL database can be used SQLite or PostgreSQL.
+Mongodb is used as a main database and Redis for a cache.
 ___
 ### Getting Started
 #### Running on Local Machine
@@ -35,26 +35,23 @@ docker-compose up -d
 ````
 ____
 #### Environment variables
-| variables          | description                                   |
-|:-------------------|:----------------------------------------------|
-| `APITOKEN`         | Telegram bot API token                        |
-| `BINANCEAPIKEY`    | Binance API key                               |
-| `BINANCESECRETKEY` | Binance Secret key                            |
-| `PGUSER`           | PostgreSQL user                               |
-| `PGHOST`           | hostname or an IP address PostgreSQL database |
-| `PGPORT`           | port from PostgreSQL database                 |
-| `PGDB`             | PostgreSQL database                           |
-| `PGPASSWORD`       | PostgreSQL database password                  |
-| `REDISHOST`        | hostname or an IP address Redis database      |
-| `REDISPORT`        | port from Redis database                      |
-| `REDISBOTDB`       | Redis bot database                            |
-| `REDISTASKSDB`     | Redis tasks database                          |
+| variables            | description                     |
+|:---------------------|:--------------------------------|
+| `BOT_API_TOKEN`      | Telegram bot API token          |
+| `BINANCE_API_KEY`    | Binance API key                 |
+| `BINANCE_SECRET_KEY` | Binance Secret key              |
+| `MONGO_URL`          | MongoDB URL                     |
+| `MONGO_DB`           | MongoDB database                |
+| `REDIS_HOST`         | hostname or an IP address Redis |
+| `REDIS_PORT`         | port from Redis                 |
+| `REDIS_FSM_DB`       | Redis bot database              |
+| `REDIS_JOB_DB`       | Redis scheduler tasks database  |
 ____
 #### Tech Stack
 + `aiohttp`
 + `aiogram`
 + `python-binance`
 + `apschduler`
-+ `sqlalchemy`
++ `pymongo`, `motor` and `beanie`
 + `redis` and `aioredis`
 + `docker` and `docker-compose`

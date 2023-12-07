@@ -1,22 +1,21 @@
-import os
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from dotenv import load_dotenv
 
-load_dotenv()
+class Settings(BaseSettings):
+    BOT_API_TOKEN: str
 
-APITOKEN = str(os.getenv("APITOKEN"))
+    BINANCE_API_KEY: str
+    BINANCE_SECRET_KEY: str
 
-BINANCEAPIKEY = str(os.getenv("BINANCEAPIKEY"))
+    MONGO_URL: str
+    MONGO_DB: str
 
-BINANCESECRETKEY = str(os.getenv("BINANCESECRETKEY"))
+    REDIS_HOST: str
+    REDIS_PORT: str
+    REDIS_FSM_DB: str
+    REDIS_JOB_DB: str
 
-PGUSER = str(os.getenv("PGUSER"))
-PGPASSWORD = str(os.getenv("PGPASSWORD"))
-PGHOST = str(os.getenv("PGHOST"))
-PGPORT = str(os.getenv("PGPORT"))
-PGDB = str(os.getenv("PGDB"))
+    model_config = SettingsConfigDict(env_file='./.env', case_sensitive=True)
 
-REDISHOST = str(os.getenv("REDISHOST"))
-REDISPORT = int(os.getenv("REDISPORT"))
-REDISBOTDB = int(os.getenv("REDISBOTDB"))
-REDISTASKSDB = int(os.getenv("REDISTASKSDB"))
+
+settings = Settings()

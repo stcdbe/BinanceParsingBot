@@ -1,147 +1,164 @@
-from aiogram.types import Message, CallbackQuery, Update, ReplyKeyboardRemove, ChatMemberUpdated
-from aiogram.dispatcher import FSMContext
-from aiogram.utils.exceptions import BotBlocked
+from aiogram import Router, F
+from aiogram.exceptions import TelegramForbiddenError
+from aiogram.filters import CommandStart, Command, ExceptionTypeFilter
+from aiogram.fsm.context import FSMContext
+from aiogram.types import Message, ReplyKeyboardRemove, CallbackQuery, ErrorEvent
 
-from bot.keyboards import getstartkb, gettimekb, gettaskskb
-from bot.binancerequests import getcurrentprice
-from bot.statesgroups import CoinStates
-from bot.db import opendb, closedb, addtasktodb, getusertasks, removetaskfromdb
-from bot.scheduler import scheduler, addscheduler, removescheduler
-from bot.constants import (STARTMESSAGE,
-                           GETFIRSTTICKER,
-                           GETSECONDTICKER,
-                           CHECKCOINS,
-                           CHECKCOINSFAIL,
-                           GETPERCENTAGE,
-                           TASKEXISTS,
-                           TOOMANYTASKS,
-                           TASKADDED,
-                           SHOWALLTASKS,
-                           NOTASKS,
-                           REMOVETASK,
-                           GETHELP)
-
-
-async def on_startup(_) -> None:
-    await opendb()
-    scheduler.start()
-
-
-async def on_shutdown(_) -> None:
-    scheduler.shutdown()
-    await closedb()
+from bot.keyboards import get_start_kb, get_time_kb, get_tasks_kb
+from bot.scheduler import create_job, del_job
+from bot.statesgroups import CoinPair
+from bot.binancerequests import get_cur_price_api
+from bot.dbservice import (get_task_db,
+                           count_tasks_db,
+                           create_task_db,
+                           get_all_users_tasks_db,
+                           del_task_db)
+from bot.constants import (START_MESSAGE,
+                           GET_FIRST_TICKER,
+                           GET_SECOND_TICKER,
+                           GET_HELP,
+                           CHECK_COINS_SUCCESS,
+                           CHECK_COINS_FAILED,
+                           GET_PERCENTAGE,
+                           TASK_EXISTS,
+                           TOO_MANY_TASKS,
+                           TASK_CREATED,
+                           SHOW_ALL_TASKS,
+                           NO_TASKS_TO_SHOW,
+                           DELETE_TASK,
+                           ACTION_CANCELED)
 
 
-async def startmes(message: Message) -> None:
-    await message.answer(text=STARTMESSAGE)
+main_router = Router(name=__name__)
 
 
-async def getfirstticker(message: Message) -> None:
-    await message.answer(text=GETFIRSTTICKER,
-                         reply_markup=await getstartkb())
-    await CoinStates.firstticker.set()
+@main_router.message(CommandStart())
+async def send_start_mes(message: Message) -> None:
+    await message.answer(text=START_MESSAGE)
 
 
-async def getsecondticker(message: Message, state: FSMContext) -> None:
-    fisrtticker = message.text.upper()
-    async with state.proxy() as data:
-        data['firstticker'] = fisrtticker
-    await message.answer(text=GETSECONDTICKER.format(ticker=fisrtticker),
-                         reply_markup=await getstartkb(),
-                         parse_mode='HTML')
-    await CoinStates.next()
+@main_router.message(Command('coin'))
+async def get_first_ticker(message: Message, state: FSMContext) -> None:
+    await state.set_state(CoinPair.first_ticker)
+    await message.answer(text=GET_FIRST_TICKER, reply_markup=await get_start_kb())
 
 
-async def checkcoin(message: Message, state: FSMContext) -> None:
-    secondticker = message.text.upper()
-    async with state.proxy() as data:
-        data['secondticker'] = secondticker
-        firstticker: str = data['firstticker']
-    coinprice = await getcurrentprice(firtick=firstticker, sectick=secondticker)
-    if coinprice:
-        await CoinStates.next()
-        await message.answer(text=CHECKCOINS.format(firstticker=firstticker,
-                                                    secondticker=secondticker,
-                                                    coinprice=coinprice),
-                             reply_markup=ReplyKeyboardRemove(),
-                             parse_mode='HTML')
+@main_router.message(F.text.regexp(r'^(?![a-z]$)([A-Z]{3,5})$'), CoinPair.first_ticker)
+async def get_second_ticker(message: Message, state: FSMContext) -> None:
+    first_ticker = message.text.upper().strip()
+    await state.update_data(first_ticker=first_ticker)
+    await state.set_state(CoinPair.second_ticker)
+    await message.answer(text=GET_SECOND_TICKER.format(first_ticker=first_ticker), reply_markup=await get_start_kb())
+
+
+@main_router.message(F.text.regexp(r'^(?![a-z]$)([A-Z]{3,5})$'), CoinPair.second_ticker)
+async def check_coins_exist(message: Message, state: FSMContext) -> None:
+    second_ticker = message.text.upper()
+    await state.update_data(second_ticker=second_ticker)
+    coins_data = await state.get_data()
+    tickers_pair = coins_data['first_ticker'] + coins_data['second_ticker']
+
+    if coins_price := await get_cur_price_api(tickers_pair=tickers_pair):
+        await state.set_state(CoinPair.percentage)
+        await message.answer(text=CHECK_COINS_SUCCESS.format(first_ticker=coins_data['first_ticker'],
+                                                             second_ticker=coins_data['second_ticker'],
+                                                             coins_price=coins_price),
+                             reply_markup=ReplyKeyboardRemove())
+
     else:
-        await message.answer(text=CHECKCOINSFAIL.format(firstticker=firstticker,
-                                                        secondticker=secondticker),
-                             reply_markup=ReplyKeyboardRemove(),
-                             parse_mode='HTML')
-        await state.finish()
+        await state.clear()
+        await message.answer(text=CHECK_COINS_FAILED.format(first_ticker=coins_data['first_ticker'],
+                                                            second_ticker=coins_data['second_ticker']),
+                             reply_markup=ReplyKeyboardRemove())
 
 
-async def getcoinpercent(message: Message, state: FSMContext) -> None:
-    percent = float(message.text)
-    async with state.proxy() as data:
-        data['percentofchange'] = percent
-    await CoinStates.next()
-    await message.answer(text=GETPERCENTAGE.format(percent=percent),
-                         reply_markup=await gettimekb(),
-                         parse_mode='HTML')
+@main_router.message(F.text.regexp(r'^[0-9]*[.,][0-9]{2,8}$'), CoinPair.percentage)
+async def get_coin_percentage(message: Message, state: FSMContext) -> None:
+    percentage = message.text
+    await state.update_data(percentage=percentage)
+    await message.answer(text=GET_PERCENTAGE.format(percentage=percentage), reply_markup=await get_time_kb())
 
 
-async def getcointime(callback: CallbackQuery, state: FSMContext) -> None:
+@main_router.callback_query(F.data.startswith('time_'))
+async def get_coin_time(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
     await callback.message.delete()
-    time = int(callback.data.split('_')[1])
-    checktask = await addtasktodb(state=state, callback=callback)
-    if checktask == 'taskexists':
-        await callback.message.answer(text=TASKEXISTS)
-    elif checktask == 'toomanytasks':
-        await callback.message.answer(text=TOOMANYTASKS)
+
+    task_data = await state.get_data()
+    tickers_pair = task_data['first_ticker'] + task_data['second_ticker']
+
+    if await get_task_db(user_id=callback.from_user.id, tickers_pair=tickers_pair):
+        await callback.message.answer(text=TASK_EXISTS.format(tickers_pair=tickers_pair))
+
+    elif await count_tasks_db(user_id=callback.from_user.id) >= 5:
+        await callback.message.answer(text=TOO_MANY_TASKS)
+
     else:
-        await addscheduler(userid=callback.from_user.id,
-                           time=time,
-                           task=checktask)
-        await callback.message.answer(text=TASKADDED.format(time=str(time)),
-                                      parse_mode='HTML')
-    await state.finish()
+        interval = int(callback.data.split('_')[1])
+        task = await create_task_db(user_id=callback.from_user.id,
+                                    task_data=task_data,
+                                    interval=interval)
+        await create_job(interval=interval,
+                         job_id=str(task.id),
+                         task=task)
+        await callback.message.answer(text=TASK_CREATED.format(interval_time=str(task.interval_minutes),
+                                                               tickers_pair=task.tickers_pair,
+                                                               percentage=str(task.percentage)))
+
+    await state.clear()
 
 
-async def cancelstate(message: Message, state: FSMContext) -> None:
-    await message.answer(text='Action canceled.', reply_markup=ReplyKeyboardRemove())
-    await state.finish()
+@main_router.message(Command('cancel'))
+async def cancel_create_task_command(message: Message, state: FSMContext) -> None:
+    current_state = await state.get_state()
+    if current_state is None:
+        return
+
+    await state.clear()
+    await message.answer(text=ACTION_CANCELED, reply_markup=ReplyKeyboardRemove())
 
 
-async def showalltasks(message: Message) -> None:
-    tasks = await getusertasks(userid=message.from_user.id)
-    if tasks:
-        await message.answer(text=SHOWALLTASKS,
-                             reply_markup=await gettaskskb(tasks=tasks))
+@main_router.callback_query(F.data == 'cancel')
+async def cancel_create_task_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    await callback.answer()
+    await state.clear()
+    await callback.message.delete()
+    await callback.message.answer(text=ACTION_CANCELED, reply_markup=ReplyKeyboardRemove())
+
+
+@main_router.message(Command('showtasks'))
+async def show_all_user_tasks(message: Message) -> None:
+    if tasks := await get_all_users_tasks_db(user_id=message.from_user.id):
+        await message.answer(text=SHOW_ALL_TASKS.format(task_count=str(len(tasks))),
+                             reply_markup=await get_tasks_kb(tasks=tasks))
     else:
-        await message.answer(text=NOTASKS)
+        await message.answer(text=NO_TASKS_TO_SHOW)
 
 
-async def removetask(callback: CallbackQuery) -> None:
+@main_router.callback_query(F.data.regexp(r'^[a-f\d]{24}$'))
+async def remove_task(callback: CallbackQuery) -> None:
     await callback.answer()
     await callback.message.delete()
-    await removescheduler(schedid=callback.data)
-    await removetaskfromdb(id=callback.data)
-    await callback.message.answer(text=REMOVETASK)
+    await del_job(job_id=callback.data)
+    await del_task_db(task_id=callback.data)
+    await callback.message.answer(text=DELETE_TASK)
 
 
-async def canceltasks(callback: CallbackQuery, state: FSMContext) -> None:
-    await callback.answer()
-    await callback.message.delete()
-    await callback.message.answer(text='Action canceled.')
-    await state.finish()
+@main_router.message(Command('help'))
+async def get_help(message: Message) -> None:
+    await message.answer(text=GET_HELP)
 
 
-async def gethelp(message: Message) -> None:
-    await message.answer(text=GETHELP)
-
-
-async def kickbot(event: ChatMemberUpdated, state: FSMContext) -> None:
-    tasks = await getusertasks(userid=event.from_user.id)
-    if tasks:
+@main_router.error(ExceptionTypeFilter(TelegramForbiddenError))
+async def get_blocked_bot_error(event: ErrorEvent, state: FSMContext) -> None:
+    await state.clear()
+    if tasks := await get_all_users_tasks_db(user_id=event.update.message.from_user.id):
         for task in tasks:
-            await removescheduler(schedid=str(task.id))
-            await removetaskfromdb(id=task.id)
-    await state.finish()
+            await del_job(job_id=str(task.id))
+            await del_task_db(task_id=task.id)
 
 
-async def geterror(update: Update, exception: BotBlocked) -> bool:
-    return True
+@main_router.error()
+async def get_unknown_error(event: ErrorEvent, state: FSMContext) -> None:
+    await state.clear()
+    print(f'Critical error caused by {event.exception}')

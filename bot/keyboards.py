@@ -1,45 +1,42 @@
-from typing import Sequence
-
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
 
-from bot.dbmodels import UserTask
+from bot.dbmodels import Task
+from bot.constants import ONE_TASK_KB
 
 
-async def getstartkb() -> ReplyKeyboardMarkup:
-    kb = ReplyKeyboardMarkup(resize_keyboard=True,
-                             row_width=3,
+async def get_start_kb() -> ReplyKeyboardMarkup:
+    tickers = ['BTC', 'ETH', 'XRP', 'BNB', 'ADA', 'DOGE', 'SOL', 'TRX', 'USDT']
+    builder = ReplyKeyboardBuilder()
+    for ticker in tickers:
+        builder.add(KeyboardButton(text=ticker))
+    builder.adjust(3)
+    return builder.as_markup(resize_keyboard=True,
                              one_time_keyboard=True,
-                             input_field_placeholder='Enter coin ticker')
-    btn1 = KeyboardButton(text='BTC')
-    btn2 = KeyboardButton(text='ETH')
-    btn3 = KeyboardButton(text='XRP')
-    btn4 = KeyboardButton(text='BNB')
-    btn5 = KeyboardButton(text='ADA')
-    btn6 = KeyboardButton(text='DOGE')
-    btn7 = KeyboardButton(text='SOL')
-    btn8 = KeyboardButton(text='TRX')
-    btn9 = KeyboardButton(text='USDT')
-    kb.add(btn1, btn2, btn3, btn4, btn5, btn6, btn7, btn8, btn9)
-    return kb
+                             input_field_placeholder='Enter first coin ticker')
 
 
-async def gettimekb() -> InlineKeyboardMarkup:
-    kb = InlineKeyboardMarkup(row_width=1)
-    btn1 = InlineKeyboardButton(text='30 minutes', callback_data='time_30')
-    btn2 = InlineKeyboardButton(text='1 hour', callback_data='time_60')
-    btn3 = InlineKeyboardButton(text='3 hours', callback_data='time_180')
-    btn4 = InlineKeyboardButton(text='6 hours', callback_data='time_360')
-    btn5 = InlineKeyboardButton(text='12 hours', callback_data='time_720')
-    btn6 = InlineKeyboardButton(text='Cancel', callback_data='canceltasks')
-    kb.add(btn1, btn2, btn3, btn4, btn5, btn6)
-    return kb
+async def get_time_kb() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    time_and_callback = {'30 minutes': 'time_30',
+                         '1 hour': 'time_60',
+                         '3 hours': 'time_180',
+                         '6 hours': 'time_360',
+                         '12 hours': 'time_720',
+                         'Cancel': 'cancel'}
+    for key, val in time_and_callback.items():
+        builder.add(InlineKeyboardButton(text=key, callback_data=val))
+    builder.adjust(1)
+    return builder.as_markup()
 
 
-async def gettaskskb(tasks: Sequence[UserTask]) -> InlineKeyboardMarkup:
-    kb = InlineKeyboardMarkup(row_width=1)
+async def get_tasks_kb(tasks: list[Task]) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
     for task in tasks:
-        kb.add(InlineKeyboardButton(text=f'{task.firstticker}/{task.secondticker} : {task.percentofchange}',
-                                    callback_data=str(task.id)))
-    cancelbtn = InlineKeyboardButton(text='Cancel', callback_data='canceltasks')
-    kb.add(cancelbtn)
-    return kb
+        builder.add(InlineKeyboardButton(text=ONE_TASK_KB.format(tickers_pair=task.tickers_pair,
+                                                                 percentage=str(task.percentage),
+                                                                 interval=str(task.interval_minutes)),
+                                         callback_data=str(task.id)))
+    builder.add(InlineKeyboardButton(text='Cancel', callback_data='cancel'))
+    builder.adjust(1)
+    return builder.as_markup()

@@ -1,7 +1,7 @@
-from aiogram.dispatcher.filters.state import StatesGroup, State
+from aiogram.fsm.state import StatesGroup, State
 
 
-class CoinStates(StatesGroup):
-    firstticker = State()
-    secondticker = State()
-    percentofchange = State()
+class CoinPair(StatesGroup):
+    first_ticker = State()
+    second_ticker = State()
+    percentage = State()

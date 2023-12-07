@@ -13,18 +13,14 @@ Dockerfile
 .dockerignore
 # Byte-compiled / optimized / DLL files
 **/__pycache__/
-**/*.py[cod]
 # C extensions
-*.so
 # Distribution / packaging
 .Python
 env/
-build/
 develop-eggs/
 dist/
 downloads/
 eggs/
-lib/
 lib64/
 parts/
 sdist/
@@ -69,5 +65,3 @@ venv/
 **/*.swp
 # VS Code
 .vscode/
-# Pycharm
-.idea/

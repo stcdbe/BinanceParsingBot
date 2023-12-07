@@ -1,41 +1,43 @@
 import logging
 
 from aiogram import Dispatcher, Bot
-from aiogram.contrib.fsm_storage.redis import RedisStorage2
-from aiogram.utils.exceptions import BotBlocked
-from aiogram.dispatcher.filters import Text
+from aiogram.enums import ParseMode
+from aiogram.fsm.storage.redis import RedisStorage
+from aiogram.methods import DeleteWebhook
+from redis.asyncio import Redis
 
-from bot.handlers import (startmes, getfirstticker, getsecondticker, getcoinpercent, checkcoin, getcointime,
-                          cancelstate, showalltasks, canceltasks, removetask, geterror, gethelp, kickbot)
-from bot.config import APITOKEN, REDISBOTDB, REDISHOST, REDISPORT
-from bot.statesgroups import CoinStates
-from bot.scheduler import scheduler
+from bot.config import settings
+from bot.dbservice import init_db
+from bot.handlers import main_router
+from bot.scheduler import start_scheduler, shutdown_scheduler
 
 
-logging.basicConfig(level=logging.WARNING)
+async def on_startup() -> None:
+    await init_db()
+    await start_scheduler()
+    print('Starting')
 
-storage = RedisStorage2(host=REDISHOST,
-                        port=REDISPORT,
-                        db=REDISBOTDB,
-                        pool_size=10,
-                        prefix='fsm')
 
-bot = Bot(token=APITOKEN)
+async def on_shutdown() -> None:
+    await shutdown_scheduler()
+    print('Exited')
 
-dp = Dispatcher(bot=bot, storage=storage)
 
-scheduler.ctx.add_instance(instance=bot, declared_class=Bot)
+async def main() -> None:
+    logging.basicConfig(level=logging.WARNING)
 
-dp.register_message_handler(startmes, commands=['start'])
-dp.register_message_handler(getfirstticker, commands=['coin'])
-dp.register_message_handler(getsecondticker, regexp='^(?![a-z]$)([A-Z]{3,5})$', state=CoinStates.firstticker)
-dp.register_message_handler(checkcoin, regexp='^(?![a-z]$)([A-Z]{3,5})$', state=CoinStates.secondticker)
-dp.register_message_handler(getcoinpercent, regexp='^[0-9]*[.,][0-9]{2,8}$', state=CoinStates.percentofchange)
-dp.register_callback_query_handler(getcointime, Text(startswith='time_'))
-dp.register_message_handler(cancelstate, commands=['cancel'], state='*')
-dp.register_message_handler(showalltasks, commands=['showalltasks'])
-dp.register_callback_query_handler(removetask, regexp='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
-dp.register_callback_query_handler(canceltasks, lambda callback: callback.data == 'canceltasks', state='*')
-dp.register_message_handler(gethelp, commands=['help'])
-dp.register_my_chat_member_handler(kickbot, state='*')
-dp.register_errors_handler(geterror, exception=BotBlocked)
+    bot = Bot(token=settings.BOT_API_TOKEN, parse_mode=ParseMode.HTML)
+    aioredis = Redis.from_url(f'redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_FSM_DB}')
+    storage = RedisStorage(redis=aioredis)
+    dp = Dispatcher(storage=storage)
+
+    await bot(DeleteWebhook(drop_pending_updates=True))
+
+    dp.startup.register(on_startup)
+    dp.include_router(main_router)
+    dp.shutdown.register(on_shutdown)
+
+    try:
+        await dp.start_polling(bot)
+    finally:
+        await bot.session.close()

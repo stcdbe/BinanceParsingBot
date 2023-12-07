@@ -1,70 +1,70 @@
 from aiogram import Bot
+from aiogram.enums import ParseMode
 from pytz import utc
-
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.executors.asyncio import AsyncIOExecutor
 from apscheduler.jobstores.redis import RedisJobStore
-from apscheduler_di import ContextSchedulerDecorator
+from apscheduler.jobstores.base import JobLookupError
 
-from bot.db import gettaskbytickers, addnewcurrentprice
-from bot.binancerequests import getcurrentprice
-from bot.config import REDISHOST, REDISPORT, REDISTASKSDB, APITOKEN
-from bot.dbmodels import UserTask
-from bot.constants import PAIRUP, PAIRDOWN
+from bot.binancerequests import get_cur_price_api
+from bot.constants import PAIR_UP, PAIR_DOWN
+from bot.dbmodels import Task
+from bot.dbservice import upd_task_price_db
+from bot.config import settings
 
 
-job_stores = {'default': RedisJobStore(jobs_key='dispatched_trips_jobs',
-                                       run_times_key='dispatched_trips_running',
-                                       host=REDISHOST,
-                                       port=REDISPORT,
-                                       db=REDISTASKSDB)}
+job_stores = {'default': RedisJobStore(db=settings.REDIS_JOB_DB,
+                                       host=settings.REDIS_HOST,
+                                       port=int(settings.REDIS_PORT))}
+
 
 executors = {'default': AsyncIOExecutor()}
 
-job_defaults = {'coalesce': False,
-                'max_instances': 3}
+job_defaults = {'coalesce': False, 'max_instances': 3}
 
-scheduler = ContextSchedulerDecorator(AsyncIOScheduler(jobstores=job_stores,
-                                                       executors=executors,
-                                                       job_defaults=job_defaults,
-                                                       timezone=utc))
+scheduler = AsyncIOScheduler(jobstores=job_stores, executors=executors, job_defaults=job_defaults, timezone=utc)
 
 
-async def sendchangedcur(userid: int, task: UserTask) -> None:
-    bot = Bot(APITOKEN)
-    session = await bot.get_session()
-    currenttask = await gettaskbytickers(userid=userid,
-                                         firtick=task.firstticker,
-                                         sectick=task.secondticker)
-    currentprice = await getcurrentprice(firtick=task.firstticker,
-                                         sectick=task.secondticker)
-    if currenttask and currentprice:
-        floatprice = float(currentprice)
-        delta = floatprice - currenttask.price
-        currentpercent = 100*delta/floatprice
-        if currentpercent > task.percentofchange:
-            await bot.send_message(chat_id=userid,
-                                   text=PAIRUP.format(firstticker=task.firstticker,
-                                                      secondticker=task.secondticker,
-                                                      currentprice=currentprice),
-                                   parse_mode='HTML')
-        elif currentpercent < -task.percentofchange:
-            await bot.send_message(chat_id=userid,
-                                   text=PAIRDOWN.format(firstticker=task.firstticker,
-                                                        secondticker=task.secondticker,
-                                                        currentprice=currentprice),
-                                   parse_mode='HTML')
-        await addnewcurrentprice(task=currenttask, currentprice=floatprice)
-    await session.close()
+async def send_changed_price(task: Task) -> None:
+    bot = Bot(settings.BOT_API_TOKEN, parse_mode=ParseMode.HTML)
+    cur_price = float(await get_cur_price_api(tickers_pair=task.tickers_pair))
+    delta = cur_price - task.price
+    cur_percentage = 100*delta/cur_price
+
+    if cur_percentage >= task.percentage:
+        await bot.send_message(chat_id=task.user_id,
+                               text=PAIR_UP.format(tickers_pair=task.tickers_pair,
+                                                   percentage=str(task.percentage),
+                                                   current_price=cur_price))
+
+    if cur_percentage <= -task.percentage:
+        await bot.send_message(chat_id=task.user_id,
+                               text=PAIR_DOWN.format(tickers_pair=task.tickers_pair,
+                                                     percentage=str(task.percentage),
+                                                     current_price=cur_price))
+
+    await upd_task_price_db(task=task, new_price=cur_price)
+    await bot.session.close()
 
 
-async def addscheduler(userid: int, time: int, task: UserTask) -> None:
-    scheduler.add_job(func=sendchangedcur,
+async def start_scheduler() -> None:
+    scheduler.start()
+
+
+async def shutdown_scheduler() -> None:
+    scheduler.shutdown()
+
+
+async def create_job(interval: int, job_id: str, task: Task) -> None:
+    scheduler.add_job(func=send_changed_price,
                       trigger='interval',
-                      minutes=time,
-                      id=str(task.id),
-                      kwargs=dict(userid=userid, task=task))
+                      minutes=interval,
+                      id=job_id,
+                      kwargs={'task': task})
 
 
-async def removescheduler(schedid: str) -> None:
-    scheduler.remove_job(job_id=schedid)
+async def del_job(job_id: str) -> None:
+    try:
+        scheduler.remove_job(job_id=job_id)
+    except JobLookupError:
+        return
